@@ -46,7 +46,7 @@ import org.apache.heron.spi.packing.PackingPlan;
 import org.apache.heron.spi.packing.Resource;
 
 /**
- * Class the help with building packing plans.
+ * Class that helps with building packing plans.
  */
 public class PackingPlanBuilder {
   private static final Logger LOG = Logger.getLogger(PackingPlanBuilder.class.getName());

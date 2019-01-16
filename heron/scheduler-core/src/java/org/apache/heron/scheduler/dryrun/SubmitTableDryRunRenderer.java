@@ -47,6 +47,8 @@ public class SubmitTableDryRunRenderer implements DryRunRender {
     Map<Integer, PackingPlan.ContainerPlan> containersMap = plan.getContainersMap();
     int numContainers = containersMap.size();
     builder.append(String.format("Total number of containers: %d", numContainers) + "\n");
+    builder.append(String.format("Overall resource utility: %s",
+        plan.getPackingPlanResourceUtility().toString()) + "\n");
     builder.append(String.format("Using packing class: %s", Context.packingClass(config)) + "\n");
     List<String> containerTables = new ArrayList<>();
     for (Integer containerId: containersMap.keySet()) {
@@ -56,6 +58,7 @@ public class SubmitTableDryRunRenderer implements DryRunRender {
       PackingPlan.ContainerPlan containerPlan = containersMap.get(containerId);
       containerBuilder.append(formatter.renderResourceUsage(
           containerPlan.getRequiredResource()) + "\n");
+      containerBuilder.append(containerPlan.getContainerResourceUtility().toString() + "\n");
       List<FormatterUtils.Row> rows = new ArrayList<>();
       for (PackingPlan.InstancePlan instancePlan: containerPlan.getInstances()) {
         rows.add(formatter.rowOfInstancePlan(instancePlan,

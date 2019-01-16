@@ -186,16 +186,6 @@ public class Config extends HashMap<String, Object> {
   public static final String TOPOLOGY_CONTAINER_PADDING_PERCENTAGE
       = "topology.container.padding.percentage";
   /**
-   * Percent of RAM to pad each container.
-   */
-  public static final String TOPOLOGY_CONTAINER_RAM_PADDING_PERCENTAGE
-      = "topology.container.ram.padding.percentage";
-  /**
-   * Percent of CPU to pad each container.
-   */
-  public static final String TOPOLOGY_CONTAINER_CPU_PADDING_PERCENTAGE
-      = "topology.container.cpu.padding.percentage";
-  /**
    * Max number of instances per container for this topology.
    */
   public static final String TOPOLOGY_CONTAINER_MAX_NUM_INSTANCES
@@ -354,8 +344,6 @@ public class Config extends HashMap<String, Object> {
     apiVars.add(TOPOLOGY_CONTAINER_MAX_DISK_HINT);
     apiVars.add(TOPOLOGY_CONTAINER_MAX_RAM_HINT);
     apiVars.add(TOPOLOGY_CONTAINER_PADDING_PERCENTAGE);
-    apiVars.add(TOPOLOGY_CONTAINER_RAM_PADDING_PERCENTAGE);
-    apiVars.add(TOPOLOGY_CONTAINER_CPU_PADDING_PERCENTAGE);
     apiVars.add(TOPOLOGY_CONTAINER_MAX_NUM_INSTANCES);
     apiVars.add(TOPOLOGY_CONTAINER_RAM_PADDING);
     apiVars.add(TOPOLOGY_CONTAINER_CPU_PADDING);
@@ -503,14 +491,6 @@ public class Config extends HashMap<String, Object> {
 
   public static void setContainerPaddingPercentage(Map<String, Object> conf, int percentage) {
     conf.put(Config.TOPOLOGY_CONTAINER_PADDING_PERCENTAGE, Integer.toString(percentage));
-  }
-
-  public static void setContainerRamPaddingPercentage(Map<String, Object> conf, int percentage) {
-    conf.put(Config.TOPOLOGY_CONTAINER_RAM_PADDING_PERCENTAGE, Integer.toString(percentage));
-  }
-
-  public static void setContainerCpuPaddingPercentage(Map<String, Object> conf, int percentage) {
-    conf.put(Config.TOPOLOGY_CONTAINER_CPU_PADDING_PERCENTAGE, Integer.toString(percentage));
   }
 
   public static void setContainerRamPadding(Map<String, Object> conf, ByteAmount nbytes) {
@@ -780,14 +760,6 @@ public class Config extends HashMap<String, Object> {
 
   public void setContainerPaddingPercentage(int percentage) {
     setContainerPaddingPercentage(this, percentage);
-  }
-
-  public void setContainerRamPaddingPercentage(int percentage) {
-    setContainerRamPaddingPercentage(this, percentage);
-  }
-
-  public void setContainerCpuPaddingPercentage(int percentage) {
-    setContainerCpuPaddingPercentage(this, percentage);
   }
 
   public void setContainerRamPadding(ByteAmount nbytes) {

@@ -184,6 +184,8 @@ public class UpdateTableDryRunRenderer implements DryRunRender {
     int numContainers = newPlan.getContainers().size();
     StringBuilder builder = new StringBuilder();
     builder.append(String.format("Total number of containers: %d", numContainers) + "\n");
+    builder.append(String.format("Overall resource utility: %s",
+        newPlan.getPackingPlanResourceUtility().toString()) + "\n");
     builder.append(String.format("Using repacking class: %s",
         Context.repackingClass(config)) + "\n");
     List<String> containerTables = new ArrayList<>();
