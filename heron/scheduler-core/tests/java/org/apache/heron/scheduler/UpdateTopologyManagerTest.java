@@ -159,9 +159,9 @@ public class UpdateTopologyManagerTest {
     IScalable mockScheduler = mock(IScalable.class);
     HashSet<PackingPlan.ContainerPlan> mockRetrunSet = new HashSet<>();
     mockRetrunSet.add(new PackingPlan.ContainerPlan(0, new HashSet<>(),
-        new Resource(5, ByteAmount.ZERO, ByteAmount.ZERO)));
+        new Resource(5, ByteAmount.ZERO, ByteAmount.ZERO), Resource.EMPTY_RESOURCE));
     mockRetrunSet.add(new PackingPlan.ContainerPlan(1, new HashSet<>(),
-        new Resource(6, ByteAmount.ZERO, ByteAmount.ZERO)));
+        new Resource(6, ByteAmount.ZERO, ByteAmount.ZERO), Resource.EMPTY_RESOURCE));
     when(mockScheduler.addContainers(any())).thenReturn(mockRetrunSet);
     UpdateTopologyManager spyUpdateManager =
         spyUpdateManager(mockStateMgr, mockScheduler, testTopology);

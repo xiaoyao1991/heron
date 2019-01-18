@@ -268,7 +268,7 @@ public class NomadSchedulerTest {
     containers.add(Mockito.mock(PackingPlan.ContainerPlan.class));
 
     PackingPlan.ContainerPlan containerPlan = new PackingPlan.ContainerPlan(
-        CONTAINER_INDEX, new HashSet<>(), Mockito.mock(Resource.class));
+        CONTAINER_INDEX, new HashSet<>(), Mockito.mock(Resource.class), Resource.EMPTY_RESOURCE);
     Optional<PackingPlan.ContainerPlan> plan = Optional.of(containerPlan);
 
     Resource resource = new Resource(CPU_RESOURCE, MEMORY_RESOURCE, DISK_RESOURCE);
@@ -295,7 +295,7 @@ public class NomadSchedulerTest {
     Resource resource = new Resource(CPU_RESOURCE, MEMORY_RESOURCE, DISK_RESOURCE);
 
     PackingPlan.ContainerPlan containerPlan = new PackingPlan.ContainerPlan(
-        CONTAINER_INDEX, new HashSet<>(), Mockito.mock(Resource.class));
+        CONTAINER_INDEX, new HashSet<>(), Mockito.mock(Resource.class), Resource.EMPTY_RESOURCE);
 
     scheduler.initialize(this.mockConfig, this.mockRuntime);
     Mockito.doReturn(new Task()).when(scheduler).getTask(

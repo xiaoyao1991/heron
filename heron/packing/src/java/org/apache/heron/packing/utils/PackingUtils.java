@@ -27,6 +27,7 @@ import org.apache.heron.api.generated.TopologyAPI;
 import org.apache.heron.api.utils.TopologyUtils;
 import org.apache.heron.common.basics.ByteAmount;
 import org.apache.heron.spi.packing.PackingException;
+import org.apache.heron.spi.packing.PackingPlan;
 import org.apache.heron.spi.packing.Resource;
 
 /**
@@ -79,6 +80,28 @@ public final class PackingUtils {
           "This instance requires containers of at least %s disk. The current max container"
               + "size is %s",
           instanceDisk, maxContainerResources.getDisk()));
+    }
+  }
+
+  public static void validatePackingPlan(PackingPlan packingPlan) throws PackingException {
+    if (packingPlan.getContainers().stream()
+        .anyMatch(containerPlan -> containerPlan.getInstances()
+            .stream().anyMatch(instancePlan ->
+                instancePlan.getResource().getRam().lessOrEqual(ByteAmount.ZERO)
+                || instancePlan.getResource().getCpu() <= 0.0
+                || instancePlan.getResource().getDisk().lessOrEqual(ByteAmount.ZERO)))) {
+      throw new PackingException("Container cannot satisfy allocated instances and padding");
+    }
+    for (PackingPlan.ContainerPlan containerPlan : packingPlan.getContainers()) {
+      Resource requiredResource = containerPlan.getRequiredResource();
+      Resource aggInstanceResource = containerPlan.getInstances().stream()
+          .map(PackingPlan.InstancePlan::getResource)
+          .reduce(Resource::plus)
+          .orElse(Resource.EMPTY_RESOURCE);
+      Resource padding = containerPlan.getPadding();
+      if (!requiredResource.satisfy(aggInstanceResource.plus(padding))) {
+        throw new PackingException("Container cannot satisfy allocated instances and padding");
+      }
     }
   }
 

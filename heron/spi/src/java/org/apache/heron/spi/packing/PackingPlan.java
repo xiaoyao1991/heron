@@ -248,18 +248,24 @@ public class PackingPlan {
     private final Resource requiredResource;
     private final Optional<Resource> scheduledResource;
 
-    public ContainerPlan(int id, Set<InstancePlan> instances, Resource requiredResource) {
-      this(id, instances, requiredResource, null);
+    private final Resource padding;
+
+    public ContainerPlan(int id, Set<InstancePlan> instances,
+                         Resource requiredResource,
+                         Resource padding) {
+      this(id, instances, requiredResource, null, padding);
     }
 
     public ContainerPlan(int id,
                          Set<InstancePlan> instances,
                          Resource requiredResource,
-                         Resource scheduledResource) {
+                         Resource scheduledResource,
+                         Resource padding) {
       this.id = id;
       this.instances = ImmutableSet.copyOf(instances);
       this.requiredResource = requiredResource;
       this.scheduledResource = Optional.fromNullable(scheduledResource);
+      this.padding = padding;
     }
 
     public int getId() {
@@ -276,6 +282,10 @@ public class PackingPlan {
 
     public Optional<Resource> getScheduledResource() {
       return scheduledResource;
+    }
+
+    public Resource getPadding() {
+      return padding;
     }
 
     @Override

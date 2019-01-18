@@ -366,7 +366,8 @@ public class PackingPlanBuilder {
           new Resource(Math.round(containerCpu), containerRam, containerDiskInBytes);
 
       PackingPlan.ContainerPlan containerPlan =
-          new PackingPlan.ContainerPlan(containerId, instancePlans, resource);
+          new PackingPlan.ContainerPlan(containerId, instancePlans, resource,
+              Resource.EMPTY_RESOURCE);
 
       containerPlans.add(containerPlan);
     }
