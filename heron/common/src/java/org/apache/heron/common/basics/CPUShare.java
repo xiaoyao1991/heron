@@ -22,6 +22,9 @@ package org.apache.heron.common.basics;
 import java.util.HashMap;
 import java.util.Map;
 
+/**
+ * Class that encapsulates CPU shares, with helpers to handle units properly.
+ */
 public final class CPUShare extends ResourceMeasure<Double> {
 
   private CPUShare(Double value) {

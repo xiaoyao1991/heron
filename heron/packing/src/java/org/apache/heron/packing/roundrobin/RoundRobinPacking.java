@@ -94,7 +94,6 @@ public class RoundRobinPacking implements IPacking, IRepacking {
 
   @VisibleForTesting
   static final ByteAmount DEFAULT_DAEMON_PROCESS_RAM_PADDING = ByteAmount.fromGigabytes(1);
-  private static final ByteAmount MIN_RAM_PER_INSTANCE = ByteAmount.fromMegabytes(192);
 
   // Use as a stub as default number value when getting config value
   private static final ByteAmount NOT_SPECIFIED_BYTE_AMOUNT = ByteAmount.fromBytes(-1);
@@ -327,7 +326,7 @@ public class RoundRobinPacking implements IPacking, IRepacking {
     Map<Integer, List<InstanceId>> allocation = new HashMap<>();
     int totalInstance = TopologyUtils.getTotalInstance(parallelismMap);
     if (numContainer > totalInstance) {
-      throw new RuntimeException("More containers allocated than instance.");
+      throw new PackingException("More containers allocated than instance.");
     }
 
     for (int i = 1; i <= numContainer; ++i) {
@@ -423,10 +422,10 @@ public class RoundRobinPacking implements IPacking, IRepacking {
     for (PackingPlan.ContainerPlan containerPlan : plan.getContainers()) {
       for (PackingPlan.InstancePlan instancePlan : containerPlan.getInstances()) {
         // Safe check
-        if (instancePlan.getResource().getRam().lessThan(MIN_RAM_PER_INSTANCE)) {
+        if (instancePlan.getResource().getRam().lessThan(PackingUtils.MIN_RAM_PER_INSTANCE)) {
           throw new PackingException(String.format("Invalid packing plan generated. A minimum of "
                   + "%s RAM is required, but InstancePlan for component '%s' has %s",
-              MIN_RAM_PER_INSTANCE, instancePlan.getComponentName(),
+              PackingUtils.MIN_RAM_PER_INSTANCE, instancePlan.getComponentName(),
               instancePlan.getResource().getRam()));
         }
       }

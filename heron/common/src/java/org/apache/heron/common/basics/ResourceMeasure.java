@@ -19,6 +19,9 @@
 
 package org.apache.heron.common.basics;
 
+/**
+ * Class that abstract computing resource
+ */
 public abstract class ResourceMeasure<V extends Number & Comparable>
     implements Comparable<ResourceMeasure<V>> {
 

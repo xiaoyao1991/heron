@@ -34,7 +34,7 @@ import org.apache.heron.spi.packing.Resource;
  */
 public final class PackingUtils {
   private static final Logger LOG = Logger.getLogger(PackingUtils.class.getName());
-  private static final ByteAmount MIN_RAM_PER_INSTANCE = ByteAmount.fromMegabytes(192);
+  public static final ByteAmount MIN_RAM_PER_INSTANCE = ByteAmount.fromMegabytes(192);
 
   private PackingUtils() {
   }
@@ -64,8 +64,8 @@ public final class PackingUtils {
           instanceRam, maxContainerResources.getRam()));
     }
 
-    double instanceCpu = Math.round(PackingUtils.increaseBy(
-        instanceResources.getCpu(), paddingPercentage));
+    double instanceCpu = Math.round(
+        PackingUtils.increaseBy(instanceResources.getCpu(), paddingPercentage));
     if (instanceCpu > maxContainerResources.getCpu()) {
       throw new PackingException(String.format(
           "This instance requires containers with at least %s CPU cores. The current max container"
@@ -109,8 +109,8 @@ public final class PackingUtils {
    *
    * @return Map &lt; component name, scale factor &gt;
    */
-  public static Map<String, Integer> getComponentsToScale(Map<String,
-      Integer> componentChanges, ScalingDirection scalingDirection) {
+  public static Map<String, Integer> getComponentsToScale(Map<String, Integer> componentChanges,
+                                                          ScalingDirection scalingDirection) {
     Map<String, Integer> componentsToScale = new HashMap<String, Integer>();
     for (String component : componentChanges.keySet()) {
       int parallelismChange = componentChanges.get(component);
