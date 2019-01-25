@@ -29,14 +29,15 @@ import java.util.logging.Logger;
 import org.apache.heron.api.generated.TopologyAPI;
 import org.apache.heron.api.utils.TopologyUtils;
 import org.apache.heron.common.basics.ByteAmount;
-import org.apache.heron.packing.RamRequirement;
-import org.apache.heron.packing.ResourceExceededException;
 import org.apache.heron.packing.builder.Container;
 import org.apache.heron.packing.builder.ContainerIdScorer;
 import org.apache.heron.packing.builder.HomogeneityScorer;
 import org.apache.heron.packing.builder.InstanceCountScorer;
 import org.apache.heron.packing.builder.PackingPlanBuilder;
+import org.apache.heron.packing.builder.ResourceRequirement;
 import org.apache.heron.packing.builder.Scorer;
+import org.apache.heron.packing.builder.SortingStrategy;
+import org.apache.heron.packing.exceptions.ResourceExceededException;
 import org.apache.heron.packing.utils.PackingUtils;
 import org.apache.heron.spi.common.Config;
 import org.apache.heron.spi.common.Context;
@@ -46,7 +47,13 @@ import org.apache.heron.spi.packing.PackingException;
 import org.apache.heron.spi.packing.PackingPlan;
 import org.apache.heron.spi.packing.Resource;
 
-import static org.apache.heron.api.Config.*;
+import static org.apache.heron.api.Config.TOPOLOGY_CONTAINER_CPU_PADDING;
+import static org.apache.heron.api.Config.TOPOLOGY_CONTAINER_MAX_CPU_HINT;
+import static org.apache.heron.api.Config.TOPOLOGY_CONTAINER_MAX_DISK_HINT;
+import static org.apache.heron.api.Config.TOPOLOGY_CONTAINER_MAX_NUM_INSTANCES;
+import static org.apache.heron.api.Config.TOPOLOGY_CONTAINER_MAX_RAM_HINT;
+import static org.apache.heron.api.Config.TOPOLOGY_CONTAINER_PADDING_PERCENTAGE;
+import static org.apache.heron.api.Config.TOPOLOGY_CONTAINER_RAM_PADDING;
 
 /**
  * FirstFitDecreasing packing algorithm
@@ -111,8 +118,7 @@ public class TwoDimensionVectorBinPacking implements IPacking, IRepacking {
   private int maxNumInstancesPerContainer;
 
   // padding
-  private ByteAmount ramPadding;
-  private double cpuPadding;
+  private Resource padding;
 
   private int numContainers = 0;
 
@@ -123,14 +129,13 @@ public class TwoDimensionVectorBinPacking implements IPacking, IRepacking {
     LOG.info(String.format("Initalizing TwoDimensionVectorBinPacking: \n"
         + "Max number of instances per container: %d \n"
         + "Default instance CPU: %f, Default instance RAM: %s, Default instance DISK: %s \n"
-        + "CPU Paddng: %f, RAM Padding: %s \n"
+        + "Paddng: %s \n"
         + "Container CPU: %f, Container RAM: %s, Container DISK: %s",
         this.maxNumInstancesPerContainer,
         this.defaultInstanceResources.getCpu(),
         this.defaultInstanceResources.getRam().toString(),
         this.defaultInstanceResources.getDisk().toString(),
-        this.cpuPadding,
-        this.ramPadding,
+        this.padding.toString(),
         this.maxContainerResources.getCpu(),
         this.maxContainerResources.getRam().toString(),
         this.maxContainerResources.getDisk().toString()));
@@ -150,9 +155,9 @@ public class TwoDimensionVectorBinPacking implements IPacking, IRepacking {
 
     int paddingPercentage = TopologyUtils.getConfigWithDefault(topologyConfig,
         TOPOLOGY_CONTAINER_PADDING_PERCENTAGE, DEFAULT_CONTAINER_PADDING_PERCENTAGE);
-    this.ramPadding = TopologyUtils.getConfigWithDefault(topologyConfig,
+    ByteAmount ramPadding = TopologyUtils.getConfigWithDefault(topologyConfig,
         TOPOLOGY_CONTAINER_RAM_PADDING, DEFAULT_CONTAINER_RAM_PADDING);
-    this.cpuPadding = TopologyUtils.getConfigWithDefault(topologyConfig,
+    double cpuPadding = TopologyUtils.getConfigWithDefault(topologyConfig,
         TOPOLOGY_CONTAINER_CPU_PADDING, DEFAULT_CONTAINER_CPU_PADDING);
 
     this.maxNumInstancesPerContainer = TopologyUtils.getConfigWithDefault(topologyConfig,
@@ -175,10 +180,10 @@ public class TwoDimensionVectorBinPacking implements IPacking, IRepacking {
         TOPOLOGY_CONTAINER_MAX_DISK_HINT, containerDefaultDisk);
 
     // finalize padding
-    this.cpuPadding = Math.max(this.cpuPadding,
-        containerCpuWithoutPadding * paddingPercentage);
-    this.ramPadding = ByteAmount.fromBytes(
-        Math.max(this.ramPadding.asBytes(), containerRamWithoutPadding.asBytes()));
+    cpuPadding = Math.max(cpuPadding, containerCpuWithoutPadding * paddingPercentage);
+    ramPadding = ByteAmount.fromBytes(
+        Math.max(ramPadding.asBytes(), containerRamWithoutPadding.asBytes()));
+    this.padding = new Resource(cpuPadding, ramPadding, ByteAmount.ZERO);
 
     // finalize container resources
     this.maxContainerResources = new Resource(containerCpuWithoutPadding + cpuPadding,
@@ -189,9 +194,10 @@ public class TwoDimensionVectorBinPacking implements IPacking, IRepacking {
   private PackingPlanBuilder newPackingPlanBuilder(PackingPlan existingPackingPlan) {
     return new PackingPlanBuilder(topology.getId(), existingPackingPlan)
         .setMaxContainerResource(maxContainerResources)
-        .setDefaultInstanceResource(defaultInstanceResources)
-//        .setRequestedContainerPadding(paddingPercentage)
-        .setRequestedComponentRam(TopologyUtils.getComponentRamMapConfig(topology));
+//        .setDefaultInstanceResource(defaultInstanceResources)
+        .setRequestedContainerPadding(padding);
+//        .setRequestedComponentRam(TopologyUtils.getComponentRamMapConfig(topology))
+//        .setRequestedComponentCpu(TopologyUtils.getComponentCpuMapConfig(topology));
   }
 
   /**
@@ -201,16 +207,74 @@ public class TwoDimensionVectorBinPacking implements IPacking, IRepacking {
    */
   @Override
   public PackingPlan pack() {
-    PackingPlanBuilder planBuilder = newPackingPlanBuilder(null);
+    PackingPlanBuilder ramFirstPlanBuilder = newPackingPlanBuilder(null);
+    PackingPlanBuilder cpuFirstPlanBuilder = newPackingPlanBuilder(null);
 
     // Get the instances using FFD allocation
     try {
-      planBuilder = getFFDAllocation(planBuilder);
+      ramFirstPlanBuilder = get2DVectorBinAllocation(ramFirstPlanBuilder,
+          SortingStrategy.RAM_FIRST);
+      cpuFirstPlanBuilder = get2DVectorBinAllocation(cpuFirstPlanBuilder,
+          SortingStrategy.CPU_FIRST);
+
+      PackingPlan ramFirstPlan = ramFirstPlanBuilder.build();
+      PackingPlan cpuFirstPlan = cpuFirstPlanBuilder.build();
+
+      return pickBetter(ramFirstPlan, cpuFirstPlan);
     } catch (ResourceExceededException e) {
       throw new PackingException("Could not allocate all instances to packing plan", e);
     }
+  }
 
-    return planBuilder.build();
+  /**
+   * Pick the better plan by checking which plan dominates in terms of:
+   * overall resource utility, average container resource utility,
+   * container ram utility stdev, and container cpu utility stdev.
+   * @param plan1
+   * @param plan2
+   * @return the better plan
+   */
+  private PackingPlan pickBetter(PackingPlan plan1, PackingPlan plan2) {
+    int plan1Points = 0;
+    int plan2Points = 0;
+
+    PackingPlan.ResourceUtility plan1ResourceUtility = plan1.getPackingPlanResourceUtility();
+    PackingPlan.ResourceUtility plan2ResourceUtility = plan2.getPackingPlanResourceUtility();
+    if (plan1ResourceUtility.compare(plan2ResourceUtility) > 0) {
+      plan1Points++;
+    } else if (plan1ResourceUtility.compare(plan2ResourceUtility) < 0) {
+      plan2Points++;
+    }
+
+    PackingPlan.ResourceUtility plan1AvgContainerResourceUtility
+        = plan1.getAvgContainerResourceUtility();
+    PackingPlan.ResourceUtility plan2AvgContainerResourceUtility
+        = plan2.getAvgContainerResourceUtility();
+    if (plan1AvgContainerResourceUtility.compare(plan2AvgContainerResourceUtility) > 0) {
+      plan1Points++;
+    } else if (plan1AvgContainerResourceUtility.compare(plan2AvgContainerResourceUtility) < 0) {
+      plan2Points++;
+    }
+
+    double plan1ContainerRamUtilityStdev = plan1.getContainerRamUtilityStdev();
+    double plan2ContainerRamUtilityStdev = plan2.getContainerRamUtilityStdev();
+    if (Double.compare(plan1ContainerRamUtilityStdev, plan2ContainerRamUtilityStdev) > 0) {
+      plan1Points++;
+    } else if (Double.compare(plan1ContainerRamUtilityStdev, plan2ContainerRamUtilityStdev) < 0) {
+      plan2Points++;
+    }
+
+    double plan1ContainerCpuUtilityStdev = plan1.getContainerCpuUtilityStdev();
+    double plan2ContainerCpuUtilityStdev = plan2.getContainerCpuUtilityStdev();
+    if (Double.compare(plan1ContainerCpuUtilityStdev, plan2ContainerCpuUtilityStdev) > 0) {
+      plan1Points++;
+    } else if (Double.compare(plan1ContainerCpuUtilityStdev, plan2ContainerCpuUtilityStdev) < 0) {
+      plan2Points++;
+    }
+
+    // TODO: +log
+
+    return plan1Points >= plan2Points ? plan1 : plan2;
   }
 
   /**
@@ -218,16 +282,23 @@ public class TwoDimensionVectorBinPacking implements IPacking, IRepacking {
    * @return new packing plan
    */
   public PackingPlan repack(PackingPlan currentPackingPlan, Map<String, Integer> componentChanges) {
-    PackingPlanBuilder planBuilder = newPackingPlanBuilder(currentPackingPlan);
+    PackingPlanBuilder ramFirstPlanBuilder = newPackingPlanBuilder(currentPackingPlan);
+    PackingPlanBuilder cpuFirstPlanBuilder = newPackingPlanBuilder(currentPackingPlan);
 
     // Get the instances using FFD allocation
     try {
-      planBuilder = getFFDAllocation(planBuilder, currentPackingPlan, componentChanges);
+      ramFirstPlanBuilder = get2DVectorBinAllocation(ramFirstPlanBuilder, SortingStrategy.RAM_FIRST,
+          currentPackingPlan, componentChanges);
+      cpuFirstPlanBuilder = get2DVectorBinAllocation(cpuFirstPlanBuilder, SortingStrategy.CPU_FIRST,
+          currentPackingPlan, componentChanges);
+
+      PackingPlan ramFirstPlan = ramFirstPlanBuilder.build();
+      PackingPlan cpuFirstPlan = cpuFirstPlanBuilder.build();
+
+      return pickBetter(ramFirstPlan, cpuFirstPlan);
     } catch (ResourceExceededException e) {
       throw new PackingException("Could not repack instances into existing packing plan", e);
     }
-
-    return planBuilder.build();
   }
 
   @Override
@@ -248,19 +319,23 @@ public class TwoDimensionVectorBinPacking implements IPacking, IRepacking {
    *
    * @return The sorted list of components and their RAM requirements
    */
-  private ArrayList<RamRequirement> getSortedRAMInstances(Set<String> componentNames) {
-    ArrayList<RamRequirement> ramRequirements = new ArrayList<>();
+  private List<ResourceRequirement> getSortedInstances(Set<String> componentNames,
+                                                            SortingStrategy sortingStrategy) {
+    List<ResourceRequirement> resourceRequirements = new ArrayList<>();
     Map<String, ByteAmount> ramMap = TopologyUtils.getComponentRamMapConfig(topology);
+    Map<String, Double> cpuMap = TopologyUtils.getComponentCpuMapConfig(topology);
 
     for (String componentName : componentNames) {
-      Resource requiredResource = PackingUtils.getResourceRequirement(
-          componentName, ramMap, this.defaultInstanceResources,
-          this.maxContainerResources, this.paddingPercentage);
-      ramRequirements.add(new RamRequirement(componentName, requiredResource.getRam()));
+//      Resource requiredResource = PackingUtils.getResourceRequirement(
+//          componentName, ramMap, this.defaultInstanceResources,
+//          this.maxContainerResources, 10);
+      Resource requiredResource = null;
+      resourceRequirements.add(new ResourceRequirement(componentName,
+          requiredResource.getRam(), requiredResource.getCpu(), sortingStrategy));
     }
-    Collections.sort(ramRequirements, Collections.reverseOrder());
+    Collections.sort(resourceRequirements, Collections.reverseOrder());
 
-    return ramRequirements;
+    return resourceRequirements;
   }
 
   /**
@@ -268,10 +343,11 @@ public class TwoDimensionVectorBinPacking implements IPacking, IRepacking {
    *
    * @return Map &lt; containerId, list of InstanceId belonging to this container &gt;
    */
-  private PackingPlanBuilder getFFDAllocation(PackingPlanBuilder planBuilder)
+  private PackingPlanBuilder get2DVectorBinAllocation(PackingPlanBuilder planBuilder,
+                                                      SortingStrategy sortingStrategy)
       throws ResourceExceededException {
     Map<String, Integer> parallelismMap = TopologyUtils.getComponentParallelism(topology);
-    assignInstancesToContainers(planBuilder, parallelismMap);
+    assignInstancesToContainers(planBuilder, parallelismMap, sortingStrategy);
     return planBuilder;
   }
 
@@ -280,9 +356,10 @@ public class TwoDimensionVectorBinPacking implements IPacking, IRepacking {
    *
    * @return Map &lt; containerId, list of InstanceId belonging to this container &gt;
    */
-  private PackingPlanBuilder getFFDAllocation(PackingPlanBuilder packingPlanBuilder,
-                                              PackingPlan currentPackingPlan,
-                                              Map<String, Integer> componentChanges)
+  private PackingPlanBuilder get2DVectorBinAllocation(PackingPlanBuilder packingPlanBuilder,
+                                                      SortingStrategy sortingStrategy,
+                                                      PackingPlan currentPackingPlan,
+                                                      Map<String, Integer> componentChanges)
       throws ResourceExceededException {
     this.numContainers = currentPackingPlan.getContainers().size();
 
@@ -292,11 +369,11 @@ public class TwoDimensionVectorBinPacking implements IPacking, IRepacking {
         PackingUtils.getComponentsToScale(componentChanges, PackingUtils.ScalingDirection.UP);
 
     if (!componentsToScaleDown.isEmpty()) {
-      removeInstancesFromContainers(packingPlanBuilder, componentsToScaleDown);
+      removeInstancesFromContainers(packingPlanBuilder, componentsToScaleDown, sortingStrategy);
     }
 
     if (!componentsToScaleUp.isEmpty()) {
-      assignInstancesToContainers(packingPlanBuilder, componentsToScaleUp);
+      assignInstancesToContainers(packingPlanBuilder, componentsToScaleUp, sortingStrategy);
     }
 
     return packingPlanBuilder;
@@ -309,13 +386,16 @@ public class TwoDimensionVectorBinPacking implements IPacking, IRepacking {
    * @param parallelismMap component parallelism
    */
   private void assignInstancesToContainers(PackingPlanBuilder planBuilder,
-      Map<String, Integer> parallelismMap) throws ResourceExceededException {
-    ArrayList<RamRequirement> ramRequirements = getSortedRAMInstances(parallelismMap.keySet());
-    for (RamRequirement ramRequirement : ramRequirements) {
-      String componentName = ramRequirement.getComponentName();
+                                           Map<String, Integer> parallelismMap,
+                                           SortingStrategy sortingStrategy)
+      throws ResourceExceededException {
+    List<ResourceRequirement> resourceRequirements
+        = getSortedInstances(parallelismMap.keySet(), sortingStrategy);
+    for (ResourceRequirement resourceRequirement : resourceRequirements) {
+      String componentName = resourceRequirement.getComponentName();
       int numInstance = parallelismMap.get(componentName);
       for (int j = 0; j < numInstance; j++) {
-        placeFFDInstance(planBuilder, componentName);
+        place2DVectorBinInstance(planBuilder, componentName);
       }
     }
   }
@@ -327,16 +407,17 @@ public class TwoDimensionVectorBinPacking implements IPacking, IRepacking {
    * @param componentsToScaleDown scale down factor for the components.
    */
   private void removeInstancesFromContainers(PackingPlanBuilder packingPlanBuilder,
-                                             Map<String, Integer> componentsToScaleDown) {
+                                             Map<String, Integer> componentsToScaleDown,
+                                             SortingStrategy sortingStrategy) {
 
-    ArrayList<RamRequirement> ramRequirements =
-        getSortedRAMInstances(componentsToScaleDown.keySet());
+    List<ResourceRequirement> resourceRequirements =
+        getSortedInstances(componentsToScaleDown.keySet(), sortingStrategy);
 
     InstanceCountScorer instanceCountScorer = new InstanceCountScorer();
     ContainerIdScorer containerIdScorer = new ContainerIdScorer(false);
 
-    for (RamRequirement ramRequirement : ramRequirements) {
-      String componentName = ramRequirement.getComponentName();
+    for (ResourceRequirement resourceRequirement : resourceRequirements) {
+      String componentName = resourceRequirement.getComponentName();
       int numInstancesToRemove = -componentsToScaleDown.get(componentName);
       List<Scorer<Container>> scorers = new ArrayList<>();
 
@@ -355,8 +436,8 @@ public class TwoDimensionVectorBinPacking implements IPacking, IRepacking {
    * Assign a particular instance to an existing container or to a new container
    *
    */
-  private void placeFFDInstance(PackingPlanBuilder planBuilder,
-                                String componentName) throws ResourceExceededException {
+  private void place2DVectorBinInstance(PackingPlanBuilder planBuilder,
+                                        String componentName) throws ResourceExceededException {
     if (this.numContainers == 0) {
       planBuilder.updateNumContainers(++numContainers);
     }
@@ -365,7 +446,7 @@ public class TwoDimensionVectorBinPacking implements IPacking, IRepacking {
       planBuilder.addInstance(new ContainerIdScorer(), componentName);
     } catch (ResourceExceededException e) {
       planBuilder.updateNumContainers(++numContainers);
-      planBuilder.addInstance(numContainers, componentName);
+//      planBuilder.addInstance(numContainers, componentName);
     }
   }
 }
